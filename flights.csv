@@ -1,0 +1,45 @@
+trip,date,leg_order,from_code,from_name,to_code,to_name
+Hawaii • Jun '22,2022-06,1,SFO,San Francisco,HNL,Honolulu
+Hawaii • Jun '22,2022-06,2,HNL,Honolulu,SFO,San Francisco
+S'pore / India / Japan • Oct '22,2022-10,1,SFO,San Francisco,SIN,Singapore
+S'pore / India / Japan • Oct '22,2022-11,2,SIN,Singapore,CJB,Coimbatore
+S'pore / India / Japan • Oct '22,2022-11,3,CJB,Coimbatore,SIN,Singapore
+S'pore / India / Japan • Oct '22,2022-11,4,SIN,Singapore,HND,Tokyo Haneda
+S'pore / India / Japan • Oct '22,2022-11,5,HND,Tokyo Haneda,SIN,Singapore
+S'pore / India / Japan • Oct '22,2023-01,6,SIN,Singapore,SFO,San Francisco
+London • Feb '23,2023-02,1,SFO,San Francisco,LHR,London Heathrow
+London • Feb '23,2023-03,2,LHR,London Heathrow,SFO,San Francisco
+Relocation • Jul '23,2023-07,1,SFO,San Francisco,PIT,Pittsburgh
+Europe / S'pore • Oct '23,2023-10,1,PIT,Pittsburgh,LHR,London Heathrow
+Europe / S'pore • Oct '23,2023-10,2,LHR,London Heathrow,NAP,Naples
+Europe / S'pore • Oct '23,2023-11,3,BSL,Basel Mulhouse,LHR,London Heathrow
+Europe / S'pore • Oct '23,2023-11,4,LHR,London Heathrow,SIN,Singapore
+Europe / S'pore • Oct '23,2023-11,5,SIN,Singapore,CNX,Chiang Mai
+Europe / S'pore • Oct '23,2023-11,6,CNX,Chiang Mai,SIN,Singapore
+Europe / S'pore • Oct '23,2023-11,7,SIN,Singapore,LHR,London Heathrow
+Europe / S'pore • Oct '23,2024-01,8,LHR,London Heathrow,PIT,Pittsburgh
+Newark • Jan '24,2024-01,1,PIT,Pittsburgh,EWR,Newark
+Newark • Jan '24,2024-02,2,EWR,Newark,PIT,Pittsburgh
+Newark • Feb '24,2024-02,1,PIT,Pittsburgh,EWR,Newark
+South Africa • Aug '24,2024-08,1,EWR,Newark,JNB,Johannesburg
+South Africa • Aug '24,2024-08,2,JNB,Johannesburg,CPT,Cape Town
+South Africa • Aug '24,2024-08,3,CPT,Cape Town,EWR,Newark
+South Africa • Aug '24,2024-08,4,EWR,Newark,PIT,Pittsburgh
+Greece / S'pore • Nov '24,2024-11,1,JFK,New York JFK,ATH,Athens
+Greece / S'pore • Nov '24,2024-11,2,ATH,Athens,SIN,Singapore
+Greece / S'pore • Nov '24,2024-11,3,SIN,Singapore,SFO,San Francisco
+Greece / S'pore • Nov '24,2025-01,4,SFO,San Francisco,PIT,Pittsburgh
+Orlando • Jan '25,2025-01,1,PIT,Pittsburgh,MCO,Orlando
+Orlando • Jan '25,2025-02,2,MCO,Orlando,PIT,Pittsburgh
+S'pore • Feb '25,2025-02,1,PIT,Pittsburgh,JFK,New York JFK
+S'pore • Feb '25,2025-08,2,JFK,New York JFK,SIN,Singapore
+S'pore • Feb '25,2025-08,3,SIN,Singapore,EWR,Newark
+S'pore • Feb '25,2025-08,4,EWR,Newark,PIT,Pittsburgh
+S'pore • Aug '25,2025-08,1,PIT,Pittsburgh,JFK,New York JFK
+S'pore • Aug '25,2025-11,2,JFK,New York JFK,SIN,Singapore
+S'pore • Aug '25,2025-11,3,SIN,Singapore,JFK,New York JFK
+S'pore • Aug '25,2026-01,4,JFK,New York JFK,PIT,Pittsburgh
+S'pore • Jan '26,2026-01,1,PIT,Pittsburgh,JFK,New York JFK
+S'pore • Jan '26,2026-04,2,JFK,New York JFK,SIN,Singapore
+S'pore • Jan '26,2026-04,3,SIN,Singapore,JFK,New York JFK
+S'pore • Jan '26,2026-06,4,JFK,New York JFK,PIT,Pittsburgh

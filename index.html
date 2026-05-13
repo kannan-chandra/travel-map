@@ -1,0 +1,1139 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Flight Memory Map</title>
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""
+  >
+  <style>
+    :root {
+      --bg: #f7f2e8;
+      --panel: rgba(255, 251, 245, 0.92);
+      --panel-border: rgba(71, 56, 35, 0.12);
+      --text: #2d2417;
+      --muted: #6d604d;
+      --accent: #0f6b61;
+      --accent-soft: rgba(15, 107, 97, 0.12);
+      --shadow: 0 20px 50px rgba(61, 46, 25, 0.15);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html, body {
+      margin: 0;
+      height: 100%;
+      overflow: hidden;
+      font-family: "Avenir Next", Avenir, "Segoe UI", sans-serif;
+      background:
+        radial-gradient(circle at top left, rgba(255, 214, 153, 0.35), transparent 34%),
+        radial-gradient(circle at top right, rgba(71, 159, 140, 0.18), transparent 26%),
+        linear-gradient(180deg, #f8f3ea 0%, #f1eadb 100%);
+      color: var(--text);
+    }
+
+    body {
+      display: grid;
+      grid-template-columns: minmax(290px, 360px) 1fr;
+      align-items: start;
+      gap: 16px;
+      height: 100vh;
+      padding: 16px;
+    }
+
+    .panel, #map {
+      border-radius: 24px;
+      overflow: hidden;
+      box-shadow: var(--shadow);
+    }
+
+    .panel {
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      gap: 18px;
+      height: calc(100vh - 32px);
+      min-height: 0;
+      padding: 22px 20px;
+      background: var(--panel);
+      border: 1px solid var(--panel-border);
+      backdrop-filter: blur(16px);
+    }
+
+    h1, h2, p {
+      margin: 0;
+    }
+
+    h1 {
+      font-size: 1.85rem;
+      line-height: 1.05;
+      letter-spacing: -0.03em;
+    }
+
+    .lede {
+      color: var(--muted);
+      line-height: 1.45;
+    }
+
+    .section {
+      display: grid;
+      gap: 10px;
+    }
+
+    .section h2 {
+      font-size: 0.82rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .stat {
+      padding: 12px 14px;
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.65);
+      border: 1px solid rgba(71, 56, 35, 0.08);
+    }
+
+    .stat.has-tooltip {
+      cursor: default;
+    }
+
+    .stat strong {
+      display: block;
+      font-size: 1.2rem;
+      margin-bottom: 4px;
+    }
+
+    .stat span {
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    .legend {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .legend-item, .trip-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .legend-item {
+      justify-content: center;
+      min-height: 68px;
+      padding: 0;
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.66);
+      border: 1px solid rgba(71, 56, 35, 0.08);
+      cursor: pointer;
+      transition: transform 140ms ease, background 140ms ease;
+      font: inherit;
+      font-size: 1.25rem;
+      font-weight: 700;
+    }
+
+    .legend-item:hover {
+      transform: translateY(-1px);
+      background: white;
+    }
+
+    .legend-item.active {
+      background: var(--accent-soft);
+      border-color: rgba(15, 107, 97, 0.2);
+    }
+
+    .trip-list {
+      display: grid;
+      flex: 1;
+      gap: 8px;
+      min-height: 0;
+      overflow: auto;
+      padding-right: 4px;
+    }
+
+    .trip-section {
+      flex: 1;
+      min-height: 0;
+    }
+
+    .trip-item {
+      justify-content: space-between;
+      padding: 10px 12px;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.66);
+      border: 1px solid rgba(71, 56, 35, 0.08);
+      cursor: pointer;
+      transition: transform 140ms ease, background 140ms ease;
+    }
+
+    .trip-item:hover {
+      transform: translateY(-1px);
+      background: white;
+    }
+
+    .trip-item.active {
+      background: var(--accent-soft);
+      border-color: rgba(15, 107, 97, 0.2);
+    }
+
+    .trip-item span {
+      color: var(--muted);
+      font-size: 0.86rem;
+      white-space: nowrap;
+      margin-left: 10px;
+    }
+
+    .trip-name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .note {
+      font-size: 0.88rem;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+
+    .warning-list {
+      display: grid;
+      gap: 8px;
+      padding: 12px 14px;
+      border-radius: 16px;
+      background: rgba(213, 107, 69, 0.1);
+      border: 1px solid rgba(213, 107, 69, 0.18);
+      color: #7c3c26;
+      font-size: 0.88rem;
+      line-height: 1.4;
+    }
+
+    .warning-list[hidden] {
+      display: none;
+    }
+
+    .stats-tooltip {
+      position: absolute;
+      z-index: 20;
+      max-width: 220px;
+      max-height: 260px;
+      overflow: auto;
+      padding: 12px 14px;
+      border-radius: 16px;
+      background: rgba(255, 251, 245, 0.98);
+      border: 1px solid rgba(71, 56, 35, 0.12);
+      box-shadow: 0 18px 40px rgba(61, 46, 25, 0.18);
+      font-size: 0.88rem;
+      line-height: 1.45;
+    }
+
+    .stats-tooltip[hidden] {
+      display: none;
+    }
+
+    .stats-tooltip strong {
+      display: block;
+      margin-bottom: 8px;
+    }
+
+    .stats-tooltip-list {
+      display: grid;
+      gap: 4px;
+    }
+
+    #map {
+      height: calc(100vh - 32px);
+      min-height: 0;
+      border: 1px solid rgba(71, 56, 35, 0.08);
+    }
+
+    .route-overlay {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 450;
+      transform-origin: 0 0;
+      will-change: transform;
+    }
+
+    .route-overlay path {
+      fill: none;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      vector-effect: non-scaling-stroke;
+    }
+
+    .route-overlay .route-hitbox {
+      fill: none;
+      stroke: transparent;
+      pointer-events: stroke;
+      vector-effect: non-scaling-stroke;
+    }
+
+    .route-overlay .point-marker,
+    .route-overlay .point-label-bg,
+    .route-overlay .point-label-text {
+      pointer-events: none;
+      vector-effect: non-scaling-stroke;
+    }
+
+    .route-overlay .point-hitbox {
+      fill: transparent;
+      pointer-events: all;
+    }
+
+    .route-overlay .point-label-text {
+      font: 700 16px "Avenir Next", Avenir, "Segoe UI", sans-serif;
+      fill: var(--text);
+      dominant-baseline: middle;
+    }
+
+    .route-overlay .point-label-bg {
+      fill: rgba(255, 255, 255, 0.92);
+      stroke: rgba(71, 56, 35, 0.12);
+      stroke-width: 1;
+    }
+
+    .leaflet-container {
+      background: #dfe9eb;
+      font: inherit;
+    }
+
+    .tooltip {
+      line-height: 1.4;
+    }
+
+    .tooltip strong {
+      display: block;
+      margin-bottom: 2px;
+    }
+
+    @media (max-width: 900px) {
+      html, body {
+        overflow: auto;
+      }
+
+      body {
+        grid-template-columns: 1fr;
+        height: auto;
+      }
+
+      .panel,
+      #map {
+        min-height: 60vh;
+        height: auto;
+      }
+    }
+  </style>
+</head>
+<body>
+  <aside class="panel">
+    <div class="section">
+      <h1>Flight Memory Map</h1>
+    </div>
+
+    <div class="section">
+      <h2 id="statsHeading">Stats</h2>
+      <div class="stats">
+        <div class="stat"><strong id="legsCount">0</strong><span>Legs</span></div>
+        <div class="stat"><strong id="tripCount">0</strong><span>Trips</span></div>
+        <div class="stat has-tooltip" id="airportStat"><strong id="airportCount">0</strong><span>Airports</span></div>
+        <div class="stat has-tooltip" id="countryStat"><strong id="countryCount">0</strong><span>Countries</span></div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Age</h2>
+      <div class="legend" id="legend"></div>
+    </div>
+
+    <div class="section trip-section">
+      <h2>Trips</h2>
+      <div class="trip-list" id="tripList"></div>
+    </div>
+
+    <div class="warning-list" id="warningList" hidden></div>
+    <div class="stats-tooltip" id="statsTooltip" hidden></div>
+  </aside>
+
+  <main id="map" aria-label="Map showing flights"></main>
+
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    crossorigin=""
+  ></script>
+  <script>
+    const AIRPORTS = {
+      ATH: { name: "Athens", country: "Greece", lat: 37.9364, lng: 23.9475 },
+      BSL: { name: "Basel Mulhouse", country: "France", lat: 47.59, lng: 7.5299 },
+      CJB: { name: "Coimbatore", country: "India", lat: 11.029, lng: 77.0434 },
+      CNX: { name: "Chiang Mai", country: "Thailand", lat: 18.7668, lng: 98.9626 },
+      CPT: { name: "Cape Town", country: "South Africa", lat: -33.9696, lng: 18.5972 },
+      DEL: { name: "Delhi", country: "India", lat: 28.5562, lng: 77.1 },
+      EWR: { name: "Newark", country: "USA", lat: 40.6895, lng: -74.1745 },
+      HND: { name: "Tokyo Haneda", country: "Japan", lat: 35.5494, lng: 139.7798 },
+      HNL: { name: "Honolulu", country: "USA", lat: 21.3187, lng: -157.9225 },
+      JFK: { name: "New York JFK", country: "USA", lat: 40.6413, lng: -73.7781 },
+      JNB: { name: "Johannesburg", country: "South Africa", lat: -26.1337, lng: 28.242 },
+      LHR: { name: "London Heathrow", country: "UK", lat: 51.47, lng: -0.4543 },
+      MCO: { name: "Orlando", country: "USA", lat: 28.4312, lng: -81.3081 },
+      NAP: { name: "Naples", country: "Italy", lat: 40.886, lng: 14.2908 },
+      PIT: { name: "Pittsburgh", country: "USA", lat: 40.4915, lng: -80.2329 },
+      SFO: { name: "San Francisco", country: "USA", lat: 37.6213, lng: -122.379 },
+      SIN: { name: "Singapore", country: "Singapore", lat: 1.3644, lng: 103.9915 }
+    };
+
+    const HOME_BASES = [
+      { code: "SFO", label: "Home base through relocation" },
+      { code: "SIN", label: "Frequent home base" },
+      { code: "PIT", label: "Home base after relocation" }
+    ];
+
+    const AGE_COLORS = {
+      0: "#d56b45",
+      1: "#df9b2d",
+      2: "#0f6b61",
+      3: "#3669b0",
+      4: "#814bb8"
+    };
+    const DOB_MONTH = "2022-03";
+
+    const ROUTE_PANE_NAME = "routeOverlayPane";
+    const ROUTE_OVERDRAW = 600;
+
+    const map = L.map("map", {
+      zoomSnap: 0.25
+    }).setView([24, 15], 2);
+
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 6,
+      minZoom: 2,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+    }).addTo(map);
+
+    const tripList = document.getElementById("tripList");
+    const legend = document.getElementById("legend");
+    const warningList = document.getElementById("warningList");
+    const statsHeading = document.getElementById("statsHeading");
+    const statsTooltip = document.getElementById("statsTooltip");
+
+    const stats = {
+      legs: document.getElementById("legsCount"),
+      trips: document.getElementById("tripCount"),
+      airports: document.getElementById("airportCount"),
+      countries: document.getElementById("countryCount")
+    };
+    const statTooltipTargets = {
+      airports: document.getElementById("airportStat"),
+      countries: document.getElementById("countryStat")
+    };
+
+    let flights = [];
+    let visits = [];
+    let skippedRows = [];
+    let currentAgeFilter = "all";
+    let currentTripFilter = "all";
+    let currentVisibleFlights = [];
+    let currentVisibleVisits = [];
+    let routePane = null;
+    let routeSvg = null;
+    let routePathsGroup = null;
+    let pointGroup = null;
+    let routeTooltipPopup = null;
+
+    initialize();
+
+    async function initialize() {
+      const [flightsResponse, visitsResponse] = await Promise.all([
+        fetch("./flights.csv"),
+        fetch("./visits.csv")
+      ]);
+      const csv = await flightsResponse.text();
+      const visitsCsv = await visitsResponse.text();
+      skippedRows = [];
+      flights = parseCsv(csv).flatMap((row, index) => {
+        const from = AIRPORTS[row.from_code];
+        const to = AIRPORTS[row.to_code];
+        if (!from || !to) {
+          skippedRows.push({
+            rowNumber: index + 2,
+            fromCode: row.from_code,
+            toCode: row.to_code,
+            trip: row.trip || "Unknown trip"
+          });
+          return [];
+        }
+
+        return [{
+          id: index,
+          trip: row.trip,
+          date: row.date || "",
+          age: computeAge(row.date),
+          legOrder: Number(row.leg_order),
+          fromCode: row.from_code,
+          fromName: row.from_name,
+          toCode: row.to_code,
+          toName: row.to_name,
+          from,
+          to,
+          routeKey: [row.from_code, row.to_code].sort().join("-")
+        }];
+      });
+      visits = parseCsv(visitsCsv).map((row) => ({
+        name: row.name,
+        country: row.country,
+        type: row.type,
+        date: row.date || "",
+        trip: row.trip || "",
+        age: computeAge(row.date),
+        lat: Number(row.lat),
+        lng: Number(row.lng)
+      })).filter((visit) => visit.name && Number.isFinite(visit.lat) && Number.isFinite(visit.lng));
+
+      populateControls();
+      setupRouteOverlay();
+      renderLegend();
+      renderWarnings();
+      setupStatTooltips();
+      render();
+    }
+
+    function parseCsv(text) {
+      const lines = text.trim().split(/\r?\n/);
+      const headers = lines.shift().split(",");
+      return lines.map((line) => {
+        const cells = line.split(",");
+        return headers.reduce((record, header, index) => {
+          record[header] = (cells[index] || "").trim();
+          return record;
+        }, {});
+      });
+    }
+
+    function populateControls() {
+      const trips = getTripsSortedByDate();
+      renderTripList(trips);
+    }
+
+    function renderLegend() {
+      legend.innerHTML = ['<button class="legend-item ' + (currentAgeFilter === "all" ? 'active' : '') + '" data-age="all" type="button" style="color:#2d2417">All</button>']
+        .concat(Object.entries(AGE_COLORS).map(([age, color]) => `
+          <button class="legend-item ${currentAgeFilter === String(age) ? "active" : ""}" data-age="${age}" type="button" style="color:${color}">
+            ${age}
+          </button>
+        `))
+        .join("");
+
+      Array.from(legend.querySelectorAll("[data-age]")).forEach((button) => {
+        button.addEventListener("click", () => {
+          const age = button.getAttribute("data-age");
+          currentAgeFilter = currentAgeFilter === age ? "all" : age;
+          if (currentAgeFilter !== "all") {
+            currentTripFilter = "all";
+          }
+          render();
+        });
+      });
+    }
+
+    function renderWarnings() {
+      if (!skippedRows.length) {
+        warningList.hidden = true;
+        warningList.innerHTML = "";
+        return;
+      }
+
+      warningList.hidden = false;
+      warningList.innerHTML = `
+        <strong>Skipped ${skippedRows.length} invalid ${skippedRows.length === 1 ? "row" : "rows"}</strong>
+        ${skippedRows.map((row) => `
+          <div>
+            Row ${row.rowNumber}: ${escapeHtml(row.trip)} • ${escapeHtml(row.fromCode)} → ${escapeHtml(row.toCode)}
+          </div>
+        `).join("")}
+      `;
+    }
+
+    function renderTripList(trips) {
+      const grouped = trips.map((trip) => {
+        const tripFlights = flights.filter((flight) => flight.trip === trip);
+        const ages = [...new Set(tripFlights.map((flight) => flight.age))];
+        return {
+          trip,
+          count: tripFlights.length,
+          label: ages.length === 1 ? "Age " + ages[0] : ages.map((age) => "Age " + age).join(", ")
+        };
+      });
+
+      tripList.innerHTML = grouped.map(({ trip, count, label }) => `
+        <button class="trip-item ${currentTripFilter === trip ? "active" : ""}" data-trip="${escapeHtml(trip)}" type="button">
+          <div class="trip-name">${escapeHtml(trip)}</div>
+          <span>${count} legs • ${escapeHtml(label)}</span>
+        </button>
+      `).join("");
+
+      Array.from(tripList.querySelectorAll("[data-trip]")).forEach((button) => {
+        button.addEventListener("click", () => {
+          const trip = button.getAttribute("data-trip");
+          currentTripFilter = currentTripFilter === trip ? "all" : trip;
+          render();
+        });
+      });
+    }
+
+    function render() {
+      const visibleFlights = flights.filter((flight) => {
+        const ageMatch = currentAgeFilter === "all" || String(flight.age) === currentAgeFilter;
+        const tripMatch = currentTripFilter === "all" || flight.trip === currentTripFilter;
+        return ageMatch && tripMatch;
+      });
+      const visibleVisits = visits.filter((visit) => {
+        const ageMatch = currentAgeFilter === "all" || String(visit.age) === currentAgeFilter;
+        const tripMatch = currentTripFilter === "all" || visit.trip === currentTripFilter;
+        return ageMatch && tripMatch;
+      });
+      currentVisibleFlights = visibleFlights;
+      currentVisibleVisits = visibleVisits;
+
+      renderLegend();
+      renderTripList(getTripsSortedByDate());
+      renderStats(visibleFlights, visibleVisits);
+      renderRoutes(visibleFlights);
+      renderPoints(visibleFlights, visibleVisits);
+      fitToFlights(visibleFlights);
+    }
+
+    function renderStats(visibleFlights, visibleVisits) {
+      const isFiltered = currentAgeFilter !== "all" || currentTripFilter !== "all";
+      statsHeading.textContent = isFiltered ? "Stats (filtered)" : "Stats";
+      stats.legs.textContent = String(visibleFlights.length);
+      stats.trips.textContent = String(new Set(visibleFlights.map((flight) => flight.trip)).size);
+      stats.airports.textContent = String(getVisibleAirportList(visibleFlights).length);
+      stats.countries.textContent = String(getVisibleCountryList(visibleFlights, visibleVisits).length);
+      statTooltipTargets.airports.dataset.tooltipTitle = "Airports";
+      statTooltipTargets.airports.dataset.tooltipItems = getVisibleAirportList(visibleFlights).join("|");
+      statTooltipTargets.countries.dataset.tooltipTitle = "Countries";
+      statTooltipTargets.countries.dataset.tooltipItems = getVisibleCountryList(visibleFlights, visibleVisits).join("|");
+    }
+
+    function renderRoutes(visibleFlights) {
+      if (!routeSvg || !routePathsGroup) return;
+      routeSvg.style.transform = "";
+      const pixelBounds = map.getPixelBounds();
+      const overdraw = ROUTE_OVERDRAW;
+      const worldOffsets = getWorldOffsets(overdraw);
+      const width = (pixelBounds.max.x - pixelBounds.min.x) + (overdraw * 2);
+      const height = (pixelBounds.max.y - pixelBounds.min.y) + (overdraw * 2);
+      routeSvg.style.left = `${-overdraw}px`;
+      routeSvg.style.top = `${-overdraw}px`;
+      routeSvg.setAttribute("width", String(width));
+      routeSvg.setAttribute("height", String(height));
+      routeSvg.setAttribute("viewBox", `${-overdraw} ${-overdraw} ${width} ${height}`);
+      routePathsGroup.replaceChildren();
+
+      const routeGroups = visibleFlights.reduce((groups, flight) => {
+        if (!groups[flight.routeKey]) groups[flight.routeKey] = [];
+        groups[flight.routeKey].push(flight);
+        return groups;
+      }, {});
+
+      Object.values(routeGroups).forEach((group) => {
+        const orderedFlights = group.slice().sort(compareFlightsChronologically);
+        const primaryFlight = orderedFlights[0];
+        const points = mapArcPoints(primaryFlight.from, primaryFlight.to, 60);
+        const ages = [...new Set(orderedFlights.map((flight) => flight.age))].sort((a, b) => a - b);
+        const bandWeight = 3;
+        const tooltipContent = routeTooltipContent(orderedFlights);
+
+        worldOffsets.forEach((offset) => {
+          const shiftedPoints = shiftLongitudes(points, offset);
+          const projectedPoints = projectPolyline(shiftedPoints);
+
+          ages.forEach((age, index) => {
+            const centerOffset = ((ages.length - 1) / 2) - index;
+            const offsetAmount = centerOffset * bandWeight;
+            const pathData = buildSvgPath(offsetPolyline(projectedPoints, offsetAmount));
+            const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+            path.setAttribute("d", pathData);
+            path.setAttribute("stroke", AGE_COLORS[age] || "#333");
+            path.setAttribute("stroke-width", String(bandWeight));
+            path.setAttribute("opacity", "0.9");
+            routePathsGroup.appendChild(path);
+
+            const hitbox = document.createElementNS("http://www.w3.org/2000/svg", "path");
+            hitbox.setAttribute("class", "route-hitbox");
+            hitbox.setAttribute("d", pathData);
+            hitbox.setAttribute("stroke-width", String(Math.max(16, bandWeight * 4)));
+            hitbox.addEventListener("mousemove", (event) => showRouteTooltip(event, tooltipContent));
+            hitbox.addEventListener("mouseleave", hideRouteTooltip);
+            routePathsGroup.appendChild(hitbox);
+          });
+        });
+      });
+    }
+
+    function renderPoints(visibleFlights, visibleVisits) {
+      if (!pointGroup) return;
+      pointGroup.replaceChildren();
+      const showLabels = currentTripFilter !== "all";
+      const worldOffsets = getWorldOffsets(0);
+      const airportCodes = new Set();
+      visibleFlights.forEach((flight) => {
+        airportCodes.add(flight.fromCode);
+        airportCodes.add(flight.toCode);
+      });
+
+      Array.from(airportCodes).forEach((code) => {
+        const airport = AIRPORTS[code];
+        const visits = visibleFlights.filter((flight) => flight.fromCode === code || flight.toCode === code).length;
+        const radius = 7;
+        const tooltipContent = airportTooltip(code, airport, HOME_BASES.find((base) => base.code === code), visits);
+        const markerColor = getAirportMarkerColor(code);
+
+        worldOffsets.forEach((offset) => {
+          const point = projectPoint(airport.lat, airport.lng + offset);
+          appendLabeledPoint(point, radius, markerColor, tooltipContent, showLabels ? code : "");
+        });
+      });
+
+      visibleVisits.forEach((visit) => {
+        const tooltipContent = visitTooltip(visit);
+        const markerColor = getVisitMarkerColor(visit);
+        worldOffsets.forEach((offset) => {
+          const point = projectPoint(visit.lat, visit.lng + offset);
+          appendLabeledPoint(point, 7, markerColor, tooltipContent, showLabels ? visit.name : "");
+        });
+      });
+    }
+
+    function fitToFlights(visibleFlights) {
+      if (!visibleFlights.length) {
+        map.setView([24, 15], 2);
+        return;
+      }
+
+      const points = visibleFlights.flatMap((flight) => [
+        [flight.from.lat, flight.from.lng],
+        [flight.to.lat, flight.to.lng]
+      ]);
+      map.fitBounds(points, { padding: [30, 30], maxZoom: 4.25 });
+    }
+
+    function mapArcPoints(from, to, steps) {
+      const startLng = from.lng;
+      const endLng = unwrapLongitude(to.lng, startLng);
+      const deltaLng = endLng - startLng;
+      const deltaLat = to.lat - from.lat;
+      const distance = Math.hypot(deltaLng * Math.cos(((from.lat + to.lat) / 2) * Math.PI / 180), deltaLat);
+      const midpointLat = (from.lat + to.lat) / 2;
+      const bulge = computeArcBulge(distance);
+      const direction = startLng <= endLng ? 1 : -1;
+      const controlLng = startLng + (deltaLng / 2);
+      const controlLat = clamp(midpointLat + bulge * direction, -55, 72);
+
+      return Array.from({ length: steps + 1 }, (_, i) => {
+        const t = i / steps;
+        const inv = 1 - t;
+        const lat = (inv * inv * from.lat) + (2 * inv * t * controlLat) + (t * t * to.lat);
+        const lng = (inv * inv * startLng) + (2 * inv * t * controlLng) + (t * t * endLng);
+        return [lat, lng];
+      });
+    }
+
+    function computeArcBulge(distance) {
+      if (distance < 12) return clamp(distance * 0.03, 0.15, 0.5);
+      if (distance < 35) return clamp(0.5 + ((distance - 12) * 0.12), 0.5, 3.25);
+      return clamp(3.25 + ((distance - 35) * 0.12), 3.25, 12);
+    }
+
+    function shiftLongitudes(points, offset) {
+      return points.map(([lat, lng]) => [lat, lng + offset]);
+    }
+
+    function projectPolyline(points) {
+      return points.map(([lat, lng]) => {
+        return projectPoint(lat, lng);
+      });
+    }
+
+    function projectPoint(lat, lng) {
+      const point = map.latLngToLayerPoint(L.latLng(lat, lng));
+      return { x: point.x, y: point.y };
+    }
+
+    function getWorldOffsets(overdraw = 0) {
+      const pixelBounds = map.getPixelBounds();
+      const minX = pixelBounds.min.x - overdraw;
+      const maxX = pixelBounds.max.x + overdraw;
+      const zoom = map.getZoom();
+      const zeroWorldX = map.project(L.latLng(0, 0), zoom).x;
+      const fullWorldX = map.project(L.latLng(0, 360), zoom).x;
+      const worldWidth = Math.abs(fullWorldX - zeroWorldX);
+
+      if (!Number.isFinite(worldWidth) || worldWidth < 1) {
+        return [0];
+      }
+
+      const offsets = [];
+      const startWorldIndex = Math.floor((minX - zeroWorldX) / worldWidth) - 1;
+      const endWorldIndex = Math.ceil((maxX - zeroWorldX) / worldWidth) + 1;
+
+      for (let worldIndex = startWorldIndex; worldIndex <= endWorldIndex; worldIndex += 1) {
+        offsets.push(worldIndex * 360);
+      }
+
+      return offsets;
+    }
+
+    function offsetPolyline(points, offsetPixels) {
+      if (Math.abs(offsetPixels) < 0.01) return points;
+
+      return points.map((point, index) => {
+        const previous = points[Math.max(0, index - 1)];
+        const next = points[Math.min(points.length - 1, index + 1)];
+        const dx = next.x - previous.x;
+        const dy = next.y - previous.y;
+        const length = Math.hypot(dx, dy) || 1;
+        const normalX = -dy / length;
+        const normalY = dx / length;
+        return {
+          x: point.x + (normalX * offsetPixels),
+          y: point.y + (normalY * offsetPixels)
+        };
+      });
+    }
+
+    function buildSvgPath(points) {
+      if (!points.length) return "";
+      return points.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`).join(" ");
+    }
+
+    function unwrapLongitude(targetLng, referenceLng) {
+      let lng = targetLng;
+      while (lng - referenceLng > 180) lng -= 360;
+      while (lng - referenceLng < -180) lng += 360;
+      return lng;
+    }
+
+    function compareFlightsChronologically(a, b) {
+      return (
+        compareDates(a.date, b.date) ||
+        (a.age - b.age) ||
+        a.trip.localeCompare(b.trip) ||
+        (a.legOrder - b.legOrder) ||
+        (a.id - b.id)
+      );
+    }
+
+    function routeTooltipContent(flightsForRoute) {
+      const first = flightsForRoute[0];
+      const title = `${escapeHtml(first.routeKey.split("-")[0])} ↔ ${escapeHtml(first.routeKey.split("-")[1])}`;
+      const flightLines = flightsForRoute.map((flight) => {
+        const datePrefix = flight.date ? `${escapeHtml(formatDateLabel(flight.date))} · ` : "";
+        return `<div>${datePrefix}Age ${flight.age}: ${escapeHtml(flight.fromCode)} → ${escapeHtml(flight.toCode)}</div>`;
+      }).join("");
+
+      return `
+        <strong>${title}</strong>
+        ${flightLines}
+      `;
+    }
+
+    function setupRouteOverlay() {
+      map.createPane(ROUTE_PANE_NAME);
+      routePane = map.getPane(ROUTE_PANE_NAME);
+      routePane.style.zIndex = "450";
+      routePane.style.pointerEvents = "none";
+      routePane.style.left = "0";
+      routePane.style.top = "0";
+      routePane.style.width = "100%";
+      routePane.style.height = "100%";
+      routeSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      routeSvg.classList.add("route-overlay");
+      routePathsGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
+      pointGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
+      routeSvg.append(routePathsGroup, pointGroup);
+      routePane.appendChild(routeSvg);
+      routeTooltipPopup = L.tooltip({ sticky: true, className: "tooltip", opacity: 1 });
+      map.on("zoom move resize", () => {
+        syncRouteOverlayScale();
+        renderRoutes(currentVisibleFlights);
+        renderPoints(currentVisibleFlights, currentVisibleVisits);
+      });
+      map.on("zoomend", () => {
+        syncRouteOverlayScale();
+      });
+      map.on("mouseout", hideRouteTooltip);
+    }
+
+    function syncRouteOverlayScale() {
+      if (!routePane || !routeSvg) return;
+
+      const transform = routePane.style.transform || getComputedStyle(routePane).transform;
+      if (!transform || transform === "none") {
+        routeSvg.style.transform = "";
+        return;
+      }
+
+      const matrixMatch = transform.match(/matrix\(([^)]+)\)/);
+      if (!matrixMatch) {
+        routeSvg.style.transform = "";
+        return;
+      }
+
+      const [a, b] = matrixMatch[1].split(",").map((value) => Number(value.trim()));
+      const scale = Math.hypot(a, b);
+      if (!Number.isFinite(scale) || Math.abs(scale - 1) < 0.001) {
+        routeSvg.style.transform = "";
+        return;
+      }
+
+      routeSvg.style.transform = `scale(${1 / scale})`;
+    }
+
+    function showRouteTooltip(event, content) {
+      if (!routeTooltipPopup) return;
+      routeTooltipPopup
+        .setLatLng(map.mouseEventToLatLng(event))
+        .setContent(content);
+      if (!map.hasLayer(routeTooltipPopup)) {
+        routeTooltipPopup.addTo(map);
+      }
+    }
+
+    function hideRouteTooltip() {
+      if (routeTooltipPopup && map.hasLayer(routeTooltipPopup)) {
+        map.removeLayer(routeTooltipPopup);
+      }
+    }
+
+    function appendLabeledPoint(point, radius, markerColor, tooltipContent, labelTextValue) {
+      const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
+
+      const marker = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      marker.setAttribute("class", "point-marker");
+      marker.setAttribute("cx", String(point.x));
+      marker.setAttribute("cy", String(point.y));
+      marker.setAttribute("r", String(radius));
+      marker.setAttribute("stroke", "#ffffff");
+      marker.setAttribute("stroke-width", "1.75");
+      marker.setAttribute("fill", markerColor);
+      marker.setAttribute("fill-opacity", "0.95");
+      group.appendChild(marker);
+
+      if (labelTextValue) {
+        const labelWidth = Math.max(34, 12 + (labelTextValue.length * 9));
+        const labelHeight = 24;
+        const labelX = point.x + 10;
+        const labelY = point.y - 12;
+
+        const labelBg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+        labelBg.setAttribute("class", "point-label-bg");
+        labelBg.setAttribute("x", String(labelX));
+        labelBg.setAttribute("y", String(labelY));
+        labelBg.setAttribute("rx", "12");
+        labelBg.setAttribute("ry", "12");
+        labelBg.setAttribute("width", String(labelWidth));
+        labelBg.setAttribute("height", String(labelHeight));
+        group.appendChild(labelBg);
+
+        const labelText = document.createElementNS("http://www.w3.org/2000/svg", "text");
+        labelText.setAttribute("class", "point-label-text");
+        labelText.setAttribute("x", String(labelX + 8));
+        labelText.setAttribute("y", String(labelY + (labelHeight / 2) + 1));
+        labelText.textContent = labelTextValue;
+        group.appendChild(labelText);
+      }
+
+      const hitbox = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      hitbox.setAttribute("class", "point-hitbox");
+      hitbox.setAttribute("cx", String(point.x));
+      hitbox.setAttribute("cy", String(point.y));
+      hitbox.setAttribute("r", String(Math.max(radius + 10, 18)));
+      hitbox.addEventListener("mousemove", (event) => showRouteTooltip(event, tooltipContent));
+      hitbox.addEventListener("mouseleave", hideRouteTooltip);
+      group.appendChild(hitbox);
+
+      pointGroup.appendChild(group);
+    }
+
+    function getAirportMarkerColor(code) {
+      const matchingFlights = flights
+        .filter((flight) => flight.fromCode === code || flight.toCode === code)
+        .sort(compareFlightsChronologically);
+      const firstAge = matchingFlights[0]?.age;
+      return AGE_COLORS[firstAge] || "#2d2417";
+    }
+
+    function getVisitMarkerColor(visit) {
+      return AGE_COLORS[visit.age] || "#2d2417";
+    }
+
+    function compareDates(a, b) {
+      if (!a && !b) return 0;
+      if (!a) return 1;
+      if (!b) return -1;
+      return a.localeCompare(b);
+    }
+
+    function getTripsSortedByDate() {
+      const tripDates = new Map();
+
+      flights.forEach((flight) => {
+        const existing = tripDates.get(flight.trip);
+        if (!existing || compareDates(flight.date, existing) < 0) {
+          tripDates.set(flight.trip, flight.date);
+        }
+      });
+
+      return [...tripDates.keys()].sort((a, b) => {
+        const dateComparison = compareDates(tripDates.get(a), tripDates.get(b));
+        return dateComparison || a.localeCompare(b);
+      });
+    }
+
+    function getCountryList() {
+      const countries = new Set();
+
+      flights.forEach((flight) => {
+        if (flight.from.country) countries.add(flight.from.country);
+        if (flight.to.country) countries.add(flight.to.country);
+      });
+
+      visits.forEach((visit) => {
+        if (visit.country) countries.add(visit.country);
+      });
+
+      return [...countries].sort((a, b) => a.localeCompare(b));
+    }
+
+    function getVisibleCountryList(visibleFlights, visibleVisits) {
+      const countries = new Set();
+
+      visibleFlights.forEach((flight) => {
+        if (flight.from.country) countries.add(flight.from.country);
+        if (flight.to.country) countries.add(flight.to.country);
+      });
+
+      visibleVisits.forEach((visit) => {
+        if (visit.country) countries.add(visit.country);
+      });
+
+      return [...countries].sort((a, b) => a.localeCompare(b));
+    }
+
+    function getVisibleAirportList(visibleFlights) {
+      const airports = new Map();
+
+      HOME_BASES.forEach((base) => {
+        const airport = AIRPORTS[base.code];
+        if (airport) airports.set(base.code, `${base.code} • ${airport.name}`);
+      });
+
+      visibleFlights.forEach((flight) => {
+        airports.set(flight.fromCode, `${flight.fromCode} • ${flight.fromName}`);
+        airports.set(flight.toCode, `${flight.toCode} • ${flight.toName}`);
+      });
+
+      return [...airports.values()].sort((a, b) => a.localeCompare(b));
+    }
+
+    function setupStatTooltips() {
+      Object.values(statTooltipTargets).forEach((element) => {
+        element.addEventListener("mouseenter", () => showStatTooltip(element));
+        element.addEventListener("mouseleave", hideStatTooltip);
+      });
+    }
+
+    function showStatTooltip(element) {
+      const items = (element.dataset.tooltipItems || "").split("|").filter(Boolean);
+      if (!items.length) return;
+
+      statsTooltip.innerHTML = `
+        <strong>${escapeHtml(element.dataset.tooltipTitle || "")}</strong>
+        <div class="stats-tooltip-list">
+          ${items.map((item) => `<div>${escapeHtml(item)}</div>`).join("")}
+        </div>
+      `;
+      statsTooltip.hidden = false;
+
+      const panelRect = statsTooltip.parentElement.getBoundingClientRect();
+      const elementRect = element.getBoundingClientRect();
+      const tooltipWidth = 220;
+      const tooltipTop = elementRect.bottom - panelRect.top + 8;
+      const preferredLeft = elementRect.left - panelRect.left;
+      const maxLeft = panelRect.width - tooltipWidth - 12;
+      statsTooltip.style.top = `${tooltipTop}px`;
+      statsTooltip.style.left = `${Math.max(12, Math.min(preferredLeft, maxLeft))}px`;
+    }
+
+    function hideStatTooltip() {
+      statsTooltip.hidden = true;
+    }
+
+    function computeAge(date) {
+      if (!date) return null;
+      const [year, month] = date.split("-").map(Number);
+      const [dobYear, dobMonth] = DOB_MONTH.split("-").map(Number);
+      if (!year || !month || !dobYear || !dobMonth) return null;
+      let age = year - dobYear;
+      if (month < dobMonth) age -= 1;
+      return Math.max(0, age);
+    }
+
+    function formatDateLabel(value) {
+      const [year, month] = value.split("-");
+      const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      const monthIndex = Number(month) - 1;
+      if (!year || monthIndex < 0 || monthIndex > 11) return value;
+      return `${monthNames[monthIndex]} ${year}`;
+    }
+
+    function airportTooltip(code, airport, homeBase, visits) {
+      return `
+        <strong>${escapeHtml(code)} • ${escapeHtml(airport.name)}</strong>
+        ${homeBase ? escapeHtml(homeBase.label) + "<br>" : ""}
+        ${visits} visible leg${visits === 1 ? "" : "s"}
+      `;
+    }
+
+    function visitTooltip(visit) {
+      const transport = visit.type === "ship" ? "Visited by ship" : "Visited by car";
+      const dateLine = visit.date ? `${formatDateLabel(visit.date)} · Age ${visit.age}<br>` : "";
+      return `
+        <strong>${escapeHtml(visit.name)}</strong>
+        ${dateLine}
+        ${transport}
+      `;
+    }
+
+    function clamp(value, min, max) {
+      return Math.min(max, Math.max(min, value));
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;");
+    }
+  </script>
+</body>
+</html>
