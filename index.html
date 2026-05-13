@@ -451,7 +451,6 @@
     let currentTripFilter = "all";
     let currentVisibleFlights = [];
     let currentVisibleVisits = [];
-    let routePane = null;
     let routeSvg = null;
     let routePathsGroup = null;
     let pointGroup = null;
@@ -635,11 +634,11 @@
     function renderRoutes(visibleFlights) {
       if (!routeSvg || !routePathsGroup) return;
       routeSvg.style.transform = "";
-      const pixelBounds = map.getPixelBounds();
+      const mapSize = map.getSize();
       const overdraw = ROUTE_OVERDRAW;
       const worldOffsets = getWorldOffsets(overdraw);
-      const width = (pixelBounds.max.x - pixelBounds.min.x) + (overdraw * 2);
-      const height = (pixelBounds.max.y - pixelBounds.min.y) + (overdraw * 2);
+      const width = mapSize.x + (overdraw * 2);
+      const height = mapSize.y + (overdraw * 2);
       routeSvg.style.left = `${-overdraw}px`;
       routeSvg.style.top = `${-overdraw}px`;
       routeSvg.setAttribute("width", String(width));
@@ -773,17 +772,16 @@
     }
 
     function projectPoint(lat, lng) {
-      const point = map.latLngToLayerPoint(L.latLng(lat, lng));
+      const point = map.latLngToContainerPoint(L.latLng(lat, lng));
       return { x: point.x, y: point.y };
     }
 
     function getWorldOffsets(overdraw = 0) {
-      const pixelBounds = map.getPixelBounds();
-      const minX = pixelBounds.min.x - overdraw;
-      const maxX = pixelBounds.max.x + overdraw;
-      const zoom = map.getZoom();
-      const zeroWorldX = map.project(L.latLng(0, 0), zoom).x;
-      const fullWorldX = map.project(L.latLng(0, 360), zoom).x;
+      const mapSize = map.getSize();
+      const minX = -overdraw;
+      const maxX = mapSize.x + overdraw;
+      const zeroWorldX = map.latLngToContainerPoint(L.latLng(0, 0)).x;
+      const fullWorldX = map.latLngToContainerPoint(L.latLng(0, 360)).x;
       const worldWidth = Math.abs(fullWorldX - zeroWorldX);
 
       if (!Number.isFinite(worldWidth) || worldWidth < 1) {
@@ -856,55 +854,18 @@
     }
 
     function setupRouteOverlay() {
-      map.createPane(ROUTE_PANE_NAME);
-      routePane = map.getPane(ROUTE_PANE_NAME);
-      routePane.style.zIndex = "450";
-      routePane.style.pointerEvents = "none";
-      routePane.style.left = "0";
-      routePane.style.top = "0";
-      routePane.style.width = "100%";
-      routePane.style.height = "100%";
       routeSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
       routeSvg.classList.add("route-overlay");
       routePathsGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
       pointGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
       routeSvg.append(routePathsGroup, pointGroup);
-      routePane.appendChild(routeSvg);
+      map.getContainer().appendChild(routeSvg);
       routeTooltipPopup = L.tooltip({ sticky: true, className: "tooltip", opacity: 1 });
       map.on("zoom move resize", () => {
-        syncRouteOverlayScale();
         renderRoutes(currentVisibleFlights);
         renderPoints(currentVisibleFlights, currentVisibleVisits);
       });
-      map.on("zoomend", () => {
-        syncRouteOverlayScale();
-      });
       map.on("mouseout", hideRouteTooltip);
-    }
-
-    function syncRouteOverlayScale() {
-      if (!routePane || !routeSvg) return;
-
-      const transform = routePane.style.transform || getComputedStyle(routePane).transform;
-      if (!transform || transform === "none") {
-        routeSvg.style.transform = "";
-        return;
-      }
-
-      const matrixMatch = transform.match(/matrix\(([^)]+)\)/);
-      if (!matrixMatch) {
-        routeSvg.style.transform = "";
-        return;
-      }
-
-      const [a, b] = matrixMatch[1].split(",").map((value) => Number(value.trim()));
-      const scale = Math.hypot(a, b);
-      if (!Number.isFinite(scale) || Math.abs(scale - 1) < 0.001) {
-        routeSvg.style.transform = "";
-        return;
-      }
-
-      routeSvg.style.transform = `scale(${1 / scale})`;
     }
 
     function showRouteTooltip(event, content) {
