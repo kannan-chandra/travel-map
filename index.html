@@ -414,7 +414,6 @@
     };
     const DOB_MONTH = "2022-03";
 
-    const ROUTE_PANE_NAME = "routeOverlayPane";
     const ROUTE_OVERDRAW = 600;
 
     const map = L.map("map", {
@@ -452,9 +451,12 @@
     let currentVisibleFlights = [];
     let currentVisibleVisits = [];
     let routeSvg = null;
+    let routeAnimationGroup = null;
     let routePathsGroup = null;
     let pointGroup = null;
     let routeTooltipPopup = null;
+    let isZoomAnimating = false;
+    let zoomAnimationState = null;
 
     initialize();
 
@@ -633,17 +635,14 @@
 
     function renderRoutes(visibleFlights) {
       if (!routeSvg || !routePathsGroup) return;
-      routeSvg.style.transform = "";
-      const mapSize = map.getSize();
-      const overdraw = ROUTE_OVERDRAW;
-      const worldOffsets = getWorldOffsets(overdraw);
-      const width = mapSize.x + (overdraw * 2);
-      const height = mapSize.y + (overdraw * 2);
-      routeSvg.style.left = `${-overdraw}px`;
-      routeSvg.style.top = `${-overdraw}px`;
-      routeSvg.setAttribute("width", String(width));
-      routeSvg.setAttribute("height", String(height));
-      routeSvg.setAttribute("viewBox", `${-overdraw} ${-overdraw} ${width} ${height}`);
+      clearOverlayAnimationTransform();
+      const overlayFrame = getOverlayFrame(ROUTE_OVERDRAW);
+      const worldOffsets = getWorldOffsets(overlayFrame);
+      routeSvg.style.left = `${overlayFrame.minX}px`;
+      routeSvg.style.top = `${overlayFrame.minY}px`;
+      routeSvg.setAttribute("width", String(overlayFrame.width));
+      routeSvg.setAttribute("height", String(overlayFrame.height));
+      routeSvg.setAttribute("viewBox", `${overlayFrame.minX} ${overlayFrame.minY} ${overlayFrame.width} ${overlayFrame.height}`);
       routePathsGroup.replaceChildren();
 
       const routeGroups = visibleFlights.reduce((groups, flight) => {
@@ -688,10 +687,14 @@
     }
 
     function renderPoints(visibleFlights, visibleVisits) {
+      renderPointsForView(visibleFlights, visibleVisits, map.getCenter(), map.getZoom());
+    }
+
+    function renderPointsForView(visibleFlights, visibleVisits, center, zoom) {
       if (!pointGroup) return;
       pointGroup.replaceChildren();
       const showLabels = currentTripFilter !== "all";
-      const worldOffsets = getWorldOffsets(0);
+      const worldOffsets = getWorldOffsets(getOverlayFrame(0), center, zoom);
       const airportCodes = new Set();
       visibleFlights.forEach((flight) => {
         airportCodes.add(flight.fromCode);
@@ -706,8 +709,8 @@
         const markerColor = getAirportMarkerColor(code);
 
         worldOffsets.forEach((offset) => {
-          const point = projectPoint(airport.lat, airport.lng + offset);
-          appendLabeledPoint(point, radius, markerColor, tooltipContent, showLabels ? code : "");
+          const point = projectPointForView(airport.lat, airport.lng + offset, center, zoom);
+          appendLabeledPoint(point, radius, markerColor, tooltipContent, showLabels ? code : "", `airport:${code}`);
         });
       });
 
@@ -715,8 +718,8 @@
         const tooltipContent = visitTooltip(visit);
         const markerColor = getVisitMarkerColor(visit);
         worldOffsets.forEach((offset) => {
-          const point = projectPoint(visit.lat, visit.lng + offset);
-          appendLabeledPoint(point, 7, markerColor, tooltipContent, showLabels ? visit.name : "");
+          const point = projectPointForView(visit.lat, visit.lng + offset, center, zoom);
+          appendLabeledPoint(point, 7, markerColor, tooltipContent, showLabels ? visit.name : "", `visit:${visit.name}`);
         });
       });
     }
@@ -772,16 +775,32 @@
     }
 
     function projectPoint(lat, lng) {
-      const point = map.latLngToContainerPoint(L.latLng(lat, lng));
+      return projectPointForView(lat, lng, map.getCenter(), map.getZoom());
+    }
+
+    function projectPointForView(lat, lng, center, zoom) {
+      const viewHalf = map.getSize().divideBy(2);
+      const projected = map.project(L.latLng(lat, lng), zoom);
+      const pixelOrigin = map.project(center, zoom).subtract(viewHalf);
+      const point = projected.subtract(pixelOrigin);
       return { x: point.x, y: point.y };
     }
 
-    function getWorldOffsets(overdraw = 0) {
+    function getOverlayFrame(overdraw) {
       const mapSize = map.getSize();
-      const minX = -overdraw;
-      const maxX = mapSize.x + overdraw;
-      const zeroWorldX = map.latLngToContainerPoint(L.latLng(0, 0)).x;
-      const fullWorldX = map.latLngToContainerPoint(L.latLng(0, 360)).x;
+      return {
+        minX: -overdraw,
+        minY: -overdraw,
+        maxX: mapSize.x + overdraw,
+        maxY: mapSize.y + overdraw,
+        width: mapSize.x + (overdraw * 2),
+        height: mapSize.y + (overdraw * 2)
+      };
+    }
+
+    function getWorldOffsets(overlayFrame, center = map.getCenter(), zoom = map.getZoom()) {
+      const zeroWorldX = projectPointForView(0, 0, center, zoom).x;
+      const fullWorldX = projectPointForView(0, 360, center, zoom).x;
       const worldWidth = Math.abs(fullWorldX - zeroWorldX);
 
       if (!Number.isFinite(worldWidth) || worldWidth < 1) {
@@ -789,8 +808,8 @@
       }
 
       const offsets = [];
-      const startWorldIndex = Math.floor((minX - zeroWorldX) / worldWidth) - 1;
-      const endWorldIndex = Math.ceil((maxX - zeroWorldX) / worldWidth) + 1;
+      const startWorldIndex = Math.floor((overlayFrame.minX - zeroWorldX) / worldWidth) - 1;
+      const endWorldIndex = Math.ceil((overlayFrame.maxX - zeroWorldX) / worldWidth) + 1;
 
       for (let worldIndex = startWorldIndex; worldIndex <= endWorldIndex; worldIndex += 1) {
         offsets.push(worldIndex * 360);
@@ -856,16 +875,58 @@
     function setupRouteOverlay() {
       routeSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
       routeSvg.classList.add("route-overlay");
+      routeAnimationGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
       routePathsGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
       pointGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
-      routeSvg.append(routePathsGroup, pointGroup);
+      routeAnimationGroup.append(routePathsGroup);
+      routeSvg.append(routeAnimationGroup, pointGroup);
       map.getContainer().appendChild(routeSvg);
       routeTooltipPopup = L.tooltip({ sticky: true, className: "tooltip", opacity: 1 });
-      map.on("zoom move resize", () => {
+      map.on("zoomstart", () => {
+        isZoomAnimating = true;
+        zoomAnimationState = {
+          zoom: map.getZoom(),
+          center: map.getCenter()
+        };
+      });
+      map.on("zoomanim", (event) => {
+        applyOverlayAnimationTransform(event);
+        renderPointsForView(currentVisibleFlights, currentVisibleVisits, event.center, event.zoom);
+      });
+      map.on("move resize", () => {
+        if (isZoomAnimating) return;
+        renderRoutes(currentVisibleFlights);
+        renderPoints(currentVisibleFlights, currentVisibleVisits);
+      });
+      map.on("zoomend", () => {
+        isZoomAnimating = false;
+        zoomAnimationState = null;
+        clearOverlayAnimationTransform();
         renderRoutes(currentVisibleFlights);
         renderPoints(currentVisibleFlights, currentVisibleVisits);
       });
       map.on("mouseout", hideRouteTooltip);
+    }
+
+    function applyOverlayAnimationTransform(event) {
+      if (!routeAnimationGroup || !zoomAnimationState) return;
+
+      const scale = map.getZoomScale(event.zoom, zoomAnimationState.zoom);
+      const viewHalf = map.getSize().divideBy(2);
+      const startCenter = map.project(zoomAnimationState.center, zoomAnimationState.zoom);
+      const targetCenter = map.project(event.center, zoomAnimationState.zoom);
+      const centerDelta = startCenter.subtract(targetCenter);
+      const translate = centerDelta.multiplyBy(scale).add(viewHalf.multiplyBy(1 - scale));
+
+      routeAnimationGroup.setAttribute(
+        "transform",
+        `matrix(${scale} 0 0 ${scale} ${translate.x} ${translate.y})`
+      );
+    }
+
+    function clearOverlayAnimationTransform() {
+      if (!routeAnimationGroup) return;
+      routeAnimationGroup.removeAttribute("transform");
     }
 
     function showRouteTooltip(event, content) {
@@ -884,11 +945,12 @@
       }
     }
 
-    function appendLabeledPoint(point, radius, markerColor, tooltipContent, labelTextValue) {
+    function appendLabeledPoint(point, radius, markerColor, tooltipContent, labelTextValue, pointId = "") {
       const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
 
       const marker = document.createElementNS("http://www.w3.org/2000/svg", "circle");
       marker.setAttribute("class", "point-marker");
+      if (pointId) marker.setAttribute("data-point-id", pointId);
       marker.setAttribute("cx", String(point.x));
       marker.setAttribute("cy", String(point.y));
       marker.setAttribute("r", String(radius));
@@ -924,6 +986,7 @@
 
       const hitbox = document.createElementNS("http://www.w3.org/2000/svg", "circle");
       hitbox.setAttribute("class", "point-hitbox");
+      if (pointId) hitbox.setAttribute("data-point-id", pointId);
       hitbox.setAttribute("cx", String(point.x));
       hitbox.setAttribute("cy", String(point.y));
       hitbox.setAttribute("r", String(Math.max(radius + 10, 18)));
