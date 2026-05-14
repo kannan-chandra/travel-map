@@ -97,6 +97,34 @@ async function recordZoomAnimationError(page, pointId, trigger) {
   return page.evaluate(() => window.__zoomAnimationSamples || []);
 }
 
+async function measureMarkerAlignment(page, pointId, airportCode) {
+  return page.evaluate(({ pointId, airportCode }) => {
+    const mapEl = document.getElementById("map");
+    const mapRect = mapEl.getBoundingClientRect();
+    const airport = AIRPORTS[airportCode];
+    const viewHalf = map.getSize().divideBy(2);
+    const projected = map.project(L.latLng(airport.lat, airport.lng), map.getZoom());
+    const pixelOrigin = map.project(map.getCenter(), map.getZoom()).subtract(viewHalf);
+    const expected = projected.subtract(pixelOrigin);
+    const expectedX = mapRect.left + expected.x;
+    const expectedY = mapRect.top + expected.y;
+
+    const markers = Array.from(document.querySelectorAll(`[data-point-id="${pointId}"]`));
+    const closest = markers.reduce((best, marker) => {
+      const rect = marker.getBoundingClientRect();
+      const x = rect.left + (rect.width / 2);
+      const y = rect.top + (rect.height / 2);
+      const distance = Math.hypot(x - expectedX, y - expectedY);
+      if (!best || distance < best.distance) {
+        return { distance, x, y, expectedX, expectedY };
+      }
+      return best;
+    }, null);
+
+    return closest;
+  }, { pointId, airportCode });
+}
+
 test.beforeEach(async ({ page }) => {
   await page.goto("/");
   await page.waitForLoadState("networkidle");
@@ -114,6 +142,9 @@ test("initial render shows overlay content on top of the map", async ({ page }) 
 });
 
 test("one-world horizontal pan keeps the overlay aligned", async ({ page }) => {
+  const before = await measureMarkerAlignment(page, "airport:SIN", "SIN");
+  expect(before.distance).toBeLessThan(20);
+
   await page.evaluate(() => {
     const zoom = map.getZoom();
     const worldWidth = map.project(L.latLng(0, 360), zoom).x - map.project(L.latLng(0, 0), zoom).x;
@@ -122,9 +153,11 @@ test("one-world horizontal pan keeps the overlay aligned", async ({ page }) => {
   await page.waitForTimeout(200);
 
   const snapshot = await getOverlaySnapshot(page);
+  const after = await measureMarkerAlignment(page, "airport:SIN", "SIN");
 
   expect(snapshot.onScreenRouteCount).toBeGreaterThan(0);
   expect(snapshot.pointCount).toBeGreaterThan(0);
+  expect(after.distance).toBeLessThan(20);
 });
 
 test("wrapped mouse drag keeps the overlay visible", async ({ page }) => {
@@ -144,9 +177,40 @@ test("wrapped mouse drag keeps the overlay visible", async ({ page }) => {
   await page.waitForTimeout(300);
 
   const snapshot = await getOverlaySnapshot(page);
+  const after = await measureMarkerAlignment(page, "airport:SIN", "SIN");
 
   expect(snapshot.onScreenRouteCount).toBeGreaterThan(0);
   expect(snapshot.onScreenPointCount).toBeGreaterThan(0);
+  expect(after.distance).toBeLessThan(24);
+});
+
+test("plain pan after reload keeps overlay aligned with the basemap", async ({ page }) => {
+  const before = await measureMarkerAlignment(page, "airport:SIN", "SIN");
+  expect(before.distance).toBeLessThan(20);
+
+  await page.evaluate(() => {
+    map.panBy([260, 120], { animate: false });
+  });
+  await page.waitForTimeout(200);
+
+  const after = await measureMarkerAlignment(page, "airport:SIN", "SIN");
+  expect(after.distance).toBeLessThan(20);
+});
+
+test("trip fit followed by pan keeps overlay aligned with the basemap", async ({ page }) => {
+  await page.getByRole("button", { name: /Hawaii/i }).click();
+  await page.waitForTimeout(300);
+
+  const before = await measureMarkerAlignment(page, "airport:HNL", "HNL");
+  expect(before.distance).toBeLessThan(20);
+
+  await page.evaluate(() => {
+    map.panBy([180, -100], { animate: false });
+  });
+  await page.waitForTimeout(200);
+
+  const after = await measureMarkerAlignment(page, "airport:HNL", "HNL");
+  expect(after.distance).toBeLessThan(20);
 });
 
 test("small trip zoom keeps overlay content visible", async ({ page }) => {

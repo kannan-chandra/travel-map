@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Flight Memory Map</title>
+  <title>Travel Memory Map</title>
   <link
     rel="stylesheet"
     href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
@@ -93,6 +93,13 @@
       color: var(--muted);
     }
 
+    .stats-summary {
+      margin-top: -4px;
+      color: var(--muted);
+      font-size: 0.88rem;
+      line-height: 1.35;
+    }
+
     .stats {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -168,8 +175,76 @@
     }
 
     .trip-section {
+      display: flex;
+      flex-direction: column;
       flex: 1;
       min-height: 0;
+    }
+
+    .trip-detail {
+      display: grid;
+      gap: 10px;
+      padding: 14px 14px 12px;
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.66);
+      border: 1px solid rgba(71, 56, 35, 0.08);
+    }
+
+    .trip-detail-floating {
+      position: absolute;
+      right: 18px;
+      bottom: 18px;
+      z-index: 470;
+      width: min(340px, calc(100% - 36px));
+      max-height: min(420px, calc(100% - 36px));
+      overflow: auto;
+      background: rgba(255, 251, 245, 0.94);
+      border-color: rgba(71, 56, 35, 0.12);
+      backdrop-filter: blur(16px);
+      box-shadow: 0 16px 38px rgba(61, 46, 25, 0.18);
+    }
+
+    .trip-detail[hidden] {
+      display: none;
+    }
+
+    .trip-detail-title {
+      font-size: 0.98rem;
+      font-weight: 700;
+      line-height: 1.3;
+    }
+
+    .trip-detail-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .trip-detail-stat strong {
+      display: block;
+      font-size: 0.78rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 3px;
+    }
+
+    .trip-detail-stat span {
+      font-size: 0.95rem;
+    }
+
+    .trip-detail-list {
+      display: grid;
+      gap: 4px;
+      color: var(--muted);
+      font-size: 0.88rem;
+      line-height: 1.35;
+    }
+
+    .trip-detail-placeholder {
+      color: var(--muted);
+      font-size: 0.9rem;
+      line-height: 1.45;
     }
 
     .trip-item {
@@ -231,7 +306,7 @@
       position: absolute;
       z-index: 20;
       max-width: 220px;
-      max-height: 420px;
+      max-height: 520px;
       overflow: auto;
       padding: 12px 14px;
       border-radius: 16px;
@@ -257,6 +332,7 @@
     }
 
     #map {
+      position: relative;
       height: calc(100vh - 32px);
       min-height: 0;
       border: 1px solid rgba(71, 56, 35, 0.08);
@@ -323,6 +399,29 @@
       margin-bottom: 2px;
     }
 
+    .map-hover-tooltip {
+      position: absolute;
+      z-index: 980;
+      max-width: 260px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: rgba(255, 251, 245, 0.98);
+      border: 1px solid rgba(71, 56, 35, 0.14);
+      box-shadow: 0 16px 36px rgba(61, 46, 25, 0.2);
+      line-height: 1.4;
+      pointer-events: none;
+      font-size: 0.88rem;
+    }
+
+    .map-hover-tooltip[hidden] {
+      display: none;
+    }
+
+    .map-hover-tooltip strong {
+      display: block;
+      margin-bottom: 2px;
+    }
+
     @media (max-width: 900px) {
       html, body {
         overflow: auto;
@@ -338,17 +437,25 @@
         min-height: 60vh;
         height: auto;
       }
+
+      .trip-detail-floating {
+        right: 12px;
+        bottom: 12px;
+        width: min(320px, calc(100% - 24px));
+        max-height: min(340px, calc(100% - 24px));
+      }
     }
   </style>
 </head>
 <body>
   <aside class="panel">
     <div class="section">
-      <h1>Flight Memory Map</h1>
+      <h1>Travel Memory Map</h1>
     </div>
 
     <div class="section">
       <h2 id="statsHeading">Stats</h2>
+      <div class="stats-summary" id="statsSummary">Showing: All trips</div>
       <div class="stats">
         <div class="stat"><strong id="legsCount">0</strong><span>Legs</span></div>
         <div class="stat"><strong id="tripCount">0</strong><span>Trips</span></div>
@@ -371,7 +478,10 @@
     <div class="stats-tooltip" id="statsTooltip" hidden></div>
   </aside>
 
-  <main id="map" aria-label="Map showing flights"></main>
+  <main id="map" aria-label="Map showing flights">
+    <div class="trip-detail trip-detail-floating" id="tripDetail" hidden></div>
+    <div class="map-hover-tooltip" id="mapHoverTooltip" hidden></div>
+  </main>
 
   <script
     src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
@@ -427,9 +537,11 @@
     }).addTo(map);
 
     const tripList = document.getElementById("tripList");
+    const tripDetail = document.getElementById("tripDetail");
     const legend = document.getElementById("legend");
     const warningList = document.getElementById("warningList");
     const statsHeading = document.getElementById("statsHeading");
+    const statsSummary = document.getElementById("statsSummary");
     const statsTooltip = document.getElementById("statsTooltip");
 
     const stats = {
@@ -454,7 +566,7 @@
     let routeAnimationGroup = null;
     let routePathsGroup = null;
     let pointGroup = null;
-    let routeTooltipPopup = null;
+    let routeHoverTooltip = document.getElementById("mapHoverTooltip");
     let isZoomAnimating = false;
     let zoomAnimationState = null;
 
@@ -615,6 +727,7 @@
       renderLegend();
       renderTripList(getTripsSortedByDate());
       renderStats(visibleFlights, visibleVisits);
+      renderTripDetail();
       renderRoutes(visibleFlights);
       renderPoints(visibleFlights, visibleVisits);
       fitToFlights(visibleFlights);
@@ -623,6 +736,7 @@
     function renderStats(visibleFlights, visibleVisits) {
       const isFiltered = currentAgeFilter !== "all" || currentTripFilter !== "all";
       statsHeading.textContent = isFiltered ? "Stats (filtered)" : "Stats";
+      statsSummary.textContent = getStatsSummaryText();
       stats.legs.textContent = String(visibleFlights.length);
       stats.trips.textContent = String(new Set(visibleFlights.map((flight) => flight.trip)).size);
       stats.airports.textContent = String(getVisibleAirportList(visibleFlights).length);
@@ -655,6 +769,7 @@
         const orderedFlights = group.slice().sort(compareFlightsChronologically);
         const primaryFlight = orderedFlights[0];
         const points = mapArcPoints(primaryFlight.from, primaryFlight.to, 60);
+        const routeKey = primaryFlight.routeKey;
         const ages = [...new Set(orderedFlights.map((flight) => flight.age))].sort((a, b) => a - b);
         const bandWeight = 3;
         const tooltipContent = routeTooltipContent(orderedFlights);
@@ -676,6 +791,7 @@
 
             const hitbox = document.createElementNS("http://www.w3.org/2000/svg", "path");
             hitbox.setAttribute("class", "route-hitbox");
+            hitbox.setAttribute("data-route-key", routeKey);
             hitbox.setAttribute("d", pathData);
             hitbox.setAttribute("stroke-width", String(Math.max(16, bandWeight * 4)));
             hitbox.addEventListener("mousemove", (event) => showRouteTooltip(event, tooltipContent));
@@ -695,6 +811,9 @@
       pointGroup.replaceChildren();
       const showLabels = currentTripFilter !== "all";
       const worldOffsets = getWorldOffsets(getOverlayFrame(0), center, zoom);
+      const labelPlacements = showLabels
+        ? getLabelPlacementsForView(visibleFlights, center, zoom)
+        : new Map();
       const airportCodes = new Set();
       visibleFlights.forEach((flight) => {
         airportCodes.add(flight.fromCode);
@@ -710,7 +829,15 @@
 
         worldOffsets.forEach((offset) => {
           const point = projectPointForView(airport.lat, airport.lng + offset, center, zoom);
-          appendLabeledPoint(point, radius, markerColor, tooltipContent, showLabels ? code : "", `airport:${code}`);
+          appendLabeledPoint(
+            point,
+            radius,
+            markerColor,
+            tooltipContent,
+            showLabels ? code : "",
+            `airport:${code}`,
+            labelPlacements.get(`airport:${code}`) || "above"
+          );
         });
       });
 
@@ -719,9 +846,54 @@
         const markerColor = getVisitMarkerColor(visit);
         worldOffsets.forEach((offset) => {
           const point = projectPointForView(visit.lat, visit.lng + offset, center, zoom);
-          appendLabeledPoint(point, 7, markerColor, tooltipContent, showLabels ? visit.name : "", `visit:${visit.name}`);
+          appendLabeledPoint(point, 7, markerColor, tooltipContent, showLabels ? visit.name : "", `visit:${visit.name}`, "above");
         });
       });
+    }
+
+    function getLabelPlacementsForView(visibleFlights, center, zoom) {
+      const placements = new Map();
+      const airportCodes = new Set();
+      visibleFlights.forEach((flight) => {
+        airportCodes.add(flight.fromCode);
+        airportCodes.add(flight.toCode);
+      });
+
+      Array.from(airportCodes).forEach((code) => {
+        const airport = AIRPORTS[code];
+        if (!airport) return;
+
+        const basePoint = projectPointForView(airport.lat, airport.lng, center, zoom);
+        const offsets = visibleFlights.flatMap((flight) => {
+          if (flight.fromCode === code) {
+            return [getRouteDepartureOffset(flight.from, flight.to, basePoint, center, zoom, "start")];
+          }
+          if (flight.toCode === code) {
+            return [getRouteDepartureOffset(flight.from, flight.to, basePoint, center, zoom, "end")];
+          }
+          return [];
+        }).filter((offset) => Number.isFinite(offset));
+
+        if (!offsets.length) {
+          placements.set(`airport:${code}`, "above");
+          return;
+        }
+
+        const averageOffset = offsets.reduce((sum, offset) => sum + offset, 0) / offsets.length;
+        placements.set(`airport:${code}`, averageOffset < 0 ? "below" : "above");
+      });
+
+      return placements;
+    }
+
+    function getRouteDepartureOffset(from, to, basePoint, center, zoom, side) {
+      const arcPoints = mapArcPoints(from, to, 32);
+      const sampleIndex = side === "start"
+        ? Math.min(3, arcPoints.length - 1)
+        : Math.max(arcPoints.length - 4, 0);
+      const [sampleLat, sampleLng] = arcPoints[sampleIndex];
+      const samplePoint = projectPointForView(sampleLat, sampleLng, center, zoom);
+      return samplePoint.y - basePoint.y;
     }
 
     function fitToFlights(visibleFlights) {
@@ -881,7 +1053,6 @@
       routeAnimationGroup.append(routePathsGroup);
       routeSvg.append(routeAnimationGroup, pointGroup);
       map.getContainer().appendChild(routeSvg);
-      routeTooltipPopup = L.tooltip({ sticky: true, className: "tooltip", opacity: 1 });
       map.on("zoomstart", () => {
         isZoomAnimating = true;
         zoomAnimationState = {
@@ -904,6 +1075,7 @@
         clearOverlayAnimationTransform();
         renderRoutes(currentVisibleFlights);
         renderPoints(currentVisibleFlights, currentVisibleVisits);
+        hideRouteTooltip();
       });
       map.on("mouseout", hideRouteTooltip);
     }
@@ -930,22 +1102,34 @@
     }
 
     function showRouteTooltip(event, content) {
-      if (!routeTooltipPopup) return;
-      routeTooltipPopup
-        .setLatLng(map.mouseEventToLatLng(event))
-        .setContent(content);
-      if (!map.hasLayer(routeTooltipPopup)) {
-        routeTooltipPopup.addTo(map);
-      }
+      if (!routeHoverTooltip) return;
+      routeHoverTooltip.innerHTML = content;
+      routeHoverTooltip.hidden = false;
+
+      const mapRect = map.getContainer().getBoundingClientRect();
+      const offsetX = 14;
+      const offsetY = 14;
+      const maxWidth = 260;
+      const left = Math.min(
+        Math.max(10, event.clientX - mapRect.left + offsetX),
+        mapRect.width - maxWidth - 10
+      );
+      const top = Math.min(
+        Math.max(10, event.clientY - mapRect.top + offsetY),
+        mapRect.height - routeHoverTooltip.offsetHeight - 10
+      );
+
+      routeHoverTooltip.style.left = `${left}px`;
+      routeHoverTooltip.style.top = `${top}px`;
     }
 
     function hideRouteTooltip() {
-      if (routeTooltipPopup && map.hasLayer(routeTooltipPopup)) {
-        map.removeLayer(routeTooltipPopup);
-      }
+      if (!routeHoverTooltip) return;
+      routeHoverTooltip.hidden = true;
+      routeHoverTooltip.innerHTML = "";
     }
 
-    function appendLabeledPoint(point, radius, markerColor, tooltipContent, labelTextValue, pointId = "") {
+    function appendLabeledPoint(point, radius, markerColor, tooltipContent, labelTextValue, pointId = "", labelPlacement = "above") {
       const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
 
       const marker = document.createElementNS("http://www.w3.org/2000/svg", "circle");
@@ -961,10 +1145,13 @@
       group.appendChild(marker);
 
       if (labelTextValue) {
-        const labelWidth = Math.max(34, 12 + (labelTextValue.length * 9));
+        const labelPaddingX = 12;
+        const labelWidth = Math.max(42, (labelPaddingX * 2) + (labelTextValue.length * 10));
         const labelHeight = 24;
-        const labelX = point.x + 10;
-        const labelY = point.y - 12;
+        const labelX = point.x - (labelWidth / 2);
+        const labelY = labelPlacement === "below"
+          ? point.y + radius + 8
+          : point.y - radius - labelHeight - 8;
 
         const labelBg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
         labelBg.setAttribute("class", "point-label-bg");
@@ -978,8 +1165,9 @@
 
         const labelText = document.createElementNS("http://www.w3.org/2000/svg", "text");
         labelText.setAttribute("class", "point-label-text");
-        labelText.setAttribute("x", String(labelX + 8));
+        labelText.setAttribute("x", String(labelX + (labelWidth / 2)));
         labelText.setAttribute("y", String(labelY + (labelHeight / 2) + 1));
+        labelText.setAttribute("text-anchor", "middle");
         labelText.textContent = labelTextValue;
         group.appendChild(labelText);
       }
@@ -1076,6 +1264,86 @@
       });
 
       return [...airports.values()].sort((a, b) => a.localeCompare(b));
+    }
+
+    function renderTripDetail() {
+      if (currentTripFilter === "all") {
+        tripDetail.hidden = true;
+        tripDetail.innerHTML = "";
+        return;
+      }
+
+      const detail = getTripDetail(currentTripFilter);
+      if (!detail) {
+        tripDetail.hidden = true;
+        tripDetail.innerHTML = "";
+        return;
+      }
+
+      const visitsLabel = detail.visits.length
+        ? detail.visits.map((visit) => escapeHtml(visit.name)).join(" • ")
+        : "None";
+
+      tripDetail.hidden = false;
+      tripDetail.innerHTML = `
+        <div class="trip-detail-title">${escapeHtml(detail.trip)}</div>
+        <div class="trip-detail-grid">
+          <div class="trip-detail-stat"><strong>Start</strong><span>${escapeHtml(formatDateLabel(detail.startDate))}</span></div>
+          <div class="trip-detail-stat"><strong>Legs</strong><span>${detail.legs}</span></div>
+          <div class="trip-detail-stat"><strong>Airports</strong><span>${detail.airports.length}</span></div>
+          <div class="trip-detail-stat"><strong>Countries</strong><span>${detail.countries.length}</span></div>
+        </div>
+        <div class="trip-detail-list">
+          <div><strong>Airports:</strong> ${detail.airports.map((airport) => escapeHtml(airport)).join(" • ")}</div>
+          <div><strong>Countries:</strong> ${detail.countries.map((country) => escapeHtml(country)).join(" • ")}</div>
+          <div><strong>Non-flight visits:</strong> ${visitsLabel}</div>
+        </div>
+      `;
+    }
+
+    function getTripDetail(trip) {
+      const tripFlights = flights
+        .filter((flight) => flight.trip === trip)
+        .sort(compareFlightsChronologically);
+      if (!tripFlights.length) return null;
+
+      const tripVisits = visits
+        .filter((visit) => visit.trip === trip)
+        .sort((a, b) => compareDates(a.date, b.date) || a.name.localeCompare(b.name));
+
+      const airports = new Map();
+      const countries = new Set();
+
+      tripFlights.forEach((flight) => {
+        airports.set(flight.fromCode, `${flight.fromCode} • ${flight.fromName}`);
+        airports.set(flight.toCode, `${flight.toCode} • ${flight.toName}`);
+        if (flight.from.country) countries.add(flight.from.country);
+        if (flight.to.country) countries.add(flight.to.country);
+      });
+
+      tripVisits.forEach((visit) => {
+        if (visit.country) countries.add(visit.country);
+      });
+
+      return {
+        trip,
+        startDate: tripFlights[0].date,
+        legs: tripFlights.length,
+        airports: [...airports.values()],
+        countries: [...countries].sort((a, b) => a.localeCompare(b)),
+        visits: tripVisits
+      };
+    }
+
+    function getStatsSummaryText() {
+      const parts = [];
+      if (currentAgeFilter !== "all") {
+        parts.push(`Age ${currentAgeFilter}`);
+      }
+      if (currentTripFilter !== "all") {
+        parts.push(currentTripFilter);
+      }
+      return parts.length ? `Showing: ${parts.join(" • ")}` : "Showing: All trips";
     }
 
     function setupStatTooltips() {

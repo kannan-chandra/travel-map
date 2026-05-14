@@ -20,11 +20,11 @@ Europe / S'pore • Oct '23,2023-11,7,SIN,Singapore,LHR,London Heathrow
 Europe / S'pore • Oct '23,2024-01,8,LHR,London Heathrow,PIT,Pittsburgh
 Newark • Jan '24,2024-01,1,PIT,Pittsburgh,EWR,Newark
 Newark • Jan '24,2024-02,2,EWR,Newark,PIT,Pittsburgh
-Newark • Feb '24,2024-02,1,PIT,Pittsburgh,EWR,Newark
-South Africa • Aug '24,2024-08,1,EWR,Newark,JNB,Johannesburg
-South Africa • Aug '24,2024-08,2,JNB,Johannesburg,CPT,Cape Town
-South Africa • Aug '24,2024-08,3,CPT,Cape Town,EWR,Newark
-South Africa • Aug '24,2024-08,4,EWR,Newark,PIT,Pittsburgh
+South Africa • Aug '24,2024-08,1,PIT,Pittsburgh,EWR,Newark
+South Africa • Aug '24,2024-08,2,EWR,Newark,JNB,Johannesburg
+South Africa • Aug '24,2024-08,3,JNB,Johannesburg,CPT,Cape Town
+South Africa • Aug '24,2024-08,4,CPT,Cape Town,EWR,Newark
+South Africa • Aug '24,2024-08,5,EWR,Newark,PIT,Pittsburgh
 Greece / S'pore • Nov '24,2024-11,1,JFK,New York JFK,ATH,Athens
 Greece / S'pore • Nov '24,2024-11,2,ATH,Athens,SIN,Singapore
 Greece / S'pore • Nov '24,2024-11,3,SIN,Singapore,SFO,San Francisco
